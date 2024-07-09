@@ -79,7 +79,7 @@ class RSIStrategy(QThread):
                 if code_name in universe_list:
                     universe[code] = code_name                                                      # 3. 내부변수 (리스트)universe 생성. 코드명:종목명.      {'019180','티에이치엔'} ** self.univese 아님
 
-            # 코드, 종목명, 생성일자를 열로 가지는 DaaFrame 생성                                         # 4. universe로 df 생성
+            # 코드, 종목명, 생성일자를 열로 가지는 DaaFrame 생성                                           # 4. universe로 df 생성
             universe_df = pd.DataFrame({
                 'code': universe.keys(),
                 'code_name': universe.values(),
@@ -87,7 +87,7 @@ class RSIStrategy(QThread):
             })
 
             # Dataframe을 DB에 저장 (universe라는 테이블명으로)
-            insert_df_to_db(self.strategy_name, 'universe', universe_df)                # 5. universe 테이블에 저장
+            insert_df_to_db(self.strategy_name, 'universe', universe_df)                 # 5. universe 테이블에 저장
 
         sql = "select * from universe"
         cur = execute_sql(self.strategy_name, sql)
@@ -102,23 +102,24 @@ class RSIStrategy(QThread):
     def check_and_get_price_data(self):
         """일봉 데이터가 존재하는지 확인하고 없다면 생성하는 함수"""
 
-        #생성된 self.universe 데이터와 비교
+        #생성된 self.universe 의 각 코드별 처리 >> {'019180', {'code_name','티에이치엔'}}
         for idx, code in enumerate(self.universe.keys()):
             print("일봉데이터 : ({}/{}) {}".format(idx + 1, len(self.universe), code))
 
-            # (1)케이스: 일봉 데이터가 아예 없는지 확인(장 종료 이후)
-            if check_transaction_closed() and not check_table_exist(self.strategy_name, code):
+            # (1)케이스: (장 종료 이후) 해당 종목코의 일봉데이터가 DB에 없으면 >> API에서 조회 후 DB로 저장
+            if check_transaction_closed() and not check_table_exist(self.strategy_name, code):      #check_transaction_closed() : 장종료 확인 / check_table_exist : 해당 코드 일본데이터 DB 존재 확인
                 # API를 이용해 조회한 가격 데이터 price_df에 저장
                 price_df = self.kiwoom.get_price_data(code)
                 # 코드를 테이블 이름으로 해서 데이터베이스에 저장
                 insert_df_to_db(self.strategy_name, code, price_df)
+
+
             else:
+                # (2)케이스: (장이 종료 이후) 해당 종목코드의 일봉데이터가 DB에 있으면 >> API에서 조회 후 DB에 저장
                 # (2), (3), (4) 케이스: 일봉 데이터가 있는 경우
-                # (2)케이스: 장이 종료된 경우 API를 이용해 얻어온 데이터를 저장
                 if check_transaction_closed():
                     # 저장된 데이터의 가장 최근 일자를 조회
                     sql = "select max(`{}`) from `{}`".format('index', code)
-
                     cur = execute_sql(self.strategy_name, sql)
 
                     # 일봉 데이터를 저장한 가장 최근 일자를 조회
@@ -127,23 +128,23 @@ class RSIStrategy(QThread):
                     # 오늘 날짜를 20210101 형태로 지정
                     now = datetime.now().strftime("%Y%m%d")
 
-                    # 최근 저장 일자가 오늘이 아닌지 확인
+                    # 최종 일봉데이터 일자가 오늘이 아니면 다시 API에서 조회 후 DB에 저장
                     if last_date[0] != now:
                         price_df = self.kiwoom.get_price_data(code)
                         # 코드를 테이블 이름으로 해서 데이터베이스에 저장
                         insert_df_to_db(self.strategy_name, code, price_df)
 
-                # (3), (4) 케이스: 장 시작 전이거나 장 중인 경우 데이터베이스에 저장된 데이터 조회
+                # (3), (4) 케이스: (장 시작 전)이거나 장 중인 경우 데이터베이스에 저장된 데이터 조회
                 else:
                     sql = "select * from `{}`".format(code)
                     cur = execute_sql(self.strategy_name, sql)
-                    cols = [column[0] for column in cur.description]
+                    cols = [column[0] for column in cur.description]                                # cur의 컬럼을 리스트 생성 (index, open, high, low, close, volume)
 
                     # 데이터베이스에서 조회한 데이터를 DataFrame으로 변환해서 저장
                     price_df = pd.DataFrame.from_records(data=cur.fetchall(), columns=cols)
-                    price_df = price_df.set_index('index')
+                    price_df = price_df.set_index('index')                                          # 각 종목코드별로 (종목코드, 시가, 종가, 고가, 저가, 거래량) df 생성
                     # 가격 데이터를 self.universe에서 접근할 수 있도록 저장
-                    self.universe[code]['price_df'] = price_df
+                    self.universe[code]['price_df'] = price_df                                          # df를 self.universe[종목코드]에 딕셔너리로 저장  >> 최종적으로 universe에 대해 시가/종가/고가/종가 등 딕셔너리 생성
 
     def run(self):
         """실질적 수행 역할을 하는 함수"""

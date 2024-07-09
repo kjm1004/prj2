@@ -2,7 +2,6 @@ import sqlite3
 
 
 def check_table_exist(db_name, table_name):
-    print("RSIStrategy.db 생성")
     with sqlite3.connect('{}.db'.format(db_name)) as con:
         cur = con.cursor()
         sql = "SELECT name FROM sqlite_master WHERE type='table' and name=:table_name"
