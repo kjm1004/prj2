@@ -70,6 +70,7 @@ class Kiwoom(QAxWidget):
         code_name = self.dynamicCall("GetMasterCodeName(QString)", code)
         return code_name
 
+    # 해당 종목코드의 일봉데이터를 API로 부터 반복해서 받아옴 >> dataFrame에 저장 후 반환
     def get_price_data(self, code):
         self.dynamicCall("SetInputValue(QString, QString)", "종목코드", code)
         self.dynamicCall("SetInputValue(QString, QString)", "수정주가구분", "1")
@@ -125,7 +126,7 @@ class Kiwoom(QAxWidget):
         elif rqname == "opw00001_req":
             deposit = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, 0, "주문가능금액")
             self.tr_data = int(deposit)
-            print(self.tr_data)
+            print("예수금: ", self.tr_data)
 
         elif rqname == "opt10075_req":
             for i in range(tr_data_cnt):
@@ -210,7 +211,7 @@ class Kiwoom(QAxWidget):
                     '매매가능수량': available_quantity
                 }
 
-            self.tr_data = self.balance
+            self.tr_data = self.balance                                                             #  tr_data 생성
 
         self.tr_event_loop.exit()
         time.sleep(0.5)
@@ -221,6 +222,7 @@ class Kiwoom(QAxWidget):
         self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "2")
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00001_req", "opw00001", 0, "0002")
 
+        print("=== 예수금 조회 === ")
         self.tr_event_loop.exec_()
         return self.tr_data
 
@@ -229,10 +231,10 @@ class Kiwoom(QAxWidget):
         return order_result
 
     def _on_receive_msg(self, screen_no, rqname, trcode, msg):
-        print("[Kiwoom] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
+        print("[kiwoom._on_receive_msg] is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
 
     def _on_chejan_slot(self, s_gubun, n_item_cnt, s_fid_list):
-        print("[Kiwoom] _on_chejan_slot is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
+        print("[Kiwoom._on_chejan_slot] is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
 
         # 9201;9203;9205;9001;912;913;302;900;901;처럼 전달되는 fid 리스트를 ';' 기준으로 구분함
         for fid in s_fid_list.split(";"):
@@ -287,6 +289,7 @@ class Kiwoom(QAxWidget):
         self.dynamicCall("SetInputValue(QString, QString)", "매매구분", "0")  # 0:전체, 1:매도, 2:매수
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "opt10075_req", "opt10075", 0, "0002")
 
+        print("=== 주문내역 조회 === ")
         self.tr_event_loop.exec_()
         return self.tr_data
 
@@ -296,6 +299,7 @@ class Kiwoom(QAxWidget):
         self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "1")
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00018_req", "opw00018", 0, "0002")
 
+        print("=== 주식 잔고 조회 === ")
         self.tr_event_loop.exec_()
         return self.tr_data
 

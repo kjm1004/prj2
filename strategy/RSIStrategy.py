@@ -106,7 +106,7 @@ class RSIStrategy(QThread):
         for idx, code in enumerate(self.universe.keys()):
             print("일봉데이터 : ({}/{}) {}".format(idx + 1, len(self.universe), code))
 
-            # (1)케이스: (장 종료 이후) 해당 종목코의 일봉데이터가 DB에 없으면 >> API에서 조회 후 DB로 저장
+            # (1)케이스: (장 종료 이후) and (해당 종목코의 일봉데이터가 DB에 없으면) >> API에서 조회 후 DB로 저장
             if check_transaction_closed() and not check_table_exist(self.strategy_name, code):      #check_transaction_closed() : 장종료 확인 / check_table_exist : 해당 코드 일본데이터 DB 존재 확인
                 # API를 이용해 조회한 가격 데이터 price_df에 저장
                 price_df = self.kiwoom.get_price_data(code)
@@ -134,7 +134,7 @@ class RSIStrategy(QThread):
                         # 코드를 테이블 이름으로 해서 데이터베이스에 저장
                         insert_df_to_db(self.strategy_name, code, price_df)
 
-                # (3), (4) 케이스: (장 시작 전)이거나 장 중인 경우 데이터베이스에 저장된 데이터 조회
+                # (3), (4) 케이스: (장 운영 중) 데이터베이스에 저장된 데이터 조회
                 else:
                     sql = "select * from `{}`".format(code)
                     cur = execute_sql(self.strategy_name, sql)
@@ -144,10 +144,12 @@ class RSIStrategy(QThread):
                     price_df = pd.DataFrame.from_records(data=cur.fetchall(), columns=cols)
                     price_df = price_df.set_index('index')                                          # 각 종목코드별로 (종목코드, 시가, 종가, 고가, 저가, 거래량) df 생성
                     # 가격 데이터를 self.universe에서 접근할 수 있도록 저장
-                    self.universe[code]['price_df'] = price_df                                          # df를 self.universe[종목코드]에 딕셔너리로 저장  >> 최종적으로 universe에 대해 시가/종가/고가/종가 등 딕셔너리 생성
+                    self.universe[code]['price_df'] = price_df                                      # df를 self.universe[종목코드]에 딕셔너리로 저장  >> 최종적으로 universe에 대해 시가/종가/고가/종가 등 딕셔너리 생성
 
     def run(self):
         """실질적 수행 역할을 하는 함수"""
+        # main.rsi_strategy.start()에 의해서 run(self) 실행
+        print("=== run(self) 실행 ===")
         while self.is_init_success:
             try:
                 # (0)장중인지 확인
@@ -156,21 +158,20 @@ class RSIStrategy(QThread):
                     time.sleep(5 * 60)
                     continue
 
-                for idx, code in enumerate(self.universe.keys()):
-                    print('[{}/{}_{}]'.format(idx + 1, len(self.universe), self.universe[code]['code_name']))
+                for idx, code in enumerate(self.universe.keys()):                                   # 1. self.universe의 리스트를 하나씩 출력
+                    print('[{}/{} {}]'.format(idx + 1, len(self.universe), self.universe[code]['code_name']))
                     time.sleep(0.5)
 
                     # (1)접수한 주문이 있는지 확인
-                    if code in self.kiwoom.order.keys():
+                    if code in self.kiwoom.order.keys():                                            # 2. 주문 목록 확인
                         # (2)주문이 있음
                         print('접수 주문', self.kiwoom.order[code])
 
-                        # (2.1) '미체결수량' 확인하여 미체결 종목인지 확인
-                        if self.kiwoom.order[code]['미체결수량'] > 0:
+                        if self.kiwoom.order[code]['미체결수량'] > 0:                                 # 주문접수 요청 전 확인 (2.1) '미체결수량' 확인 >> 미체결 종목인지 확인
                             pass
 
                     # (3)보유 종목인지 확인
-                    elif code in self.kiwoom.balance.keys():
+                    elif code in self.kiwoom.balance.keys():                                        # 주문접수 요청 전 확인 (2.2) '보유종목' 확인 >> 매도대상 확인
                         print('보유 종목', self.kiwoom.balance[code])
                         # (6)매도 대상 확인
                         if self.check_sell_signal(code):
@@ -178,8 +179,7 @@ class RSIStrategy(QThread):
                             self.order_sell(code)
 
                     else:
-                        # (4)접수 주문 및 보유 종목이 아니라면 매수대상인지 확인 후 주문접수
-                        self.check_buy_signal_and_order(code)
+                        self.check_buy_signal_and_order(code)                                       # 3. 접수 주문 및 보유 종목이 아니라면 매수대상인지 확인 후 주문접수
 
             except Exception as e:
                 print(traceback.format_exc())
@@ -200,6 +200,7 @@ class RSIStrategy(QThread):
         # 종목코드들을 ';'을 기준으로 묶어주는 작업
         codes = ";".join(map(str, codes))
 
+        print("=== 실시간 유니버스 종목 체결현황 === ")
         # 화면번호 9999에 종목코드들의 실시간 체결정보 수신을 요청
         self.kiwoom.set_real_reg("9999", codes, fids, "0")
 
